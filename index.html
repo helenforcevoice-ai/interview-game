@@ -174,6 +174,10 @@ td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:n
 .pr{font-size:12px;font-weight:600;white-space:nowrap}
 .pr.must{color:var(--green)} .pr.can{color:var(--muted)} .pr.cut{color:var(--red)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;z-index:60}
+.demobar{display:flex;justify-content:space-between;gap:10px 16px;align-items:center;flex-wrap:wrap;background:var(--yellow-soft);border:1.5px solid var(--yellow);border-radius:10px;padding:10px 14px;font-size:14px}
+.tour-hl{outline:3px solid var(--accent);outline-offset:4px;border-radius:10px;position:relative;z-index:30}
+.tour{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));width:min(560px,calc(100% - 32px));background:var(--surface);border:1.5px solid var(--ink);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);z-index:55;display:flex;flex-direction:column;gap:8px}
+.tour h3{font-size:17px}.tour p{margin:0;font-size:14px}
 .copyfall{width:100%;min-height:140px;font-family:var(--f-mono);font-size:12px}
 </style>
 </head>
@@ -288,7 +292,7 @@ const KEY='szch-level1-v1';
 function fresh(){return{screen:'intro',consent:[false,false,false,false],consentDone:false,opened:1,active:'intro',rolls:{},pendingCase:null,deck:shuffle(CASES.map(c=>c.id)),limit:60,k7req:false,consentExtra:[],items:[],flipped:{},caseLog:[]}}
 let S=load()||fresh();
 function load(){try{const r=localStorage.getItem(KEY);return r?JSON.parse(r):null}catch(e){return null}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function save(){if(S.demo)return;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 function rnd(n){try{const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%n}catch(e){return Math.floor(Math.random()*n)}}
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]]}return a}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -350,7 +354,7 @@ function renderIntro(){
         <div class="lvl"><div><b>2. Карты кейсов</b></div><span class="st">Готовится к выпуску</span></div>
         <div class="lvl"><div><b>3. Свой кейс</b></div><span class="st">Готовится к выпуску</span></div>
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn accent" id="go">Начать обучающую партию</button></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn accent" id="go">Начать обучающую партию</button><button class="btn ghost" id="demo">Посмотреть демо за 2 минуты</button></div>
     </div>
     <div class="fan" aria-hidden="true">
       ${cardHTML({id:'К5',min:5},'green','«Вспомните случай, когда хотели [действие], но передумали…»')}
@@ -359,12 +363,13 @@ function renderIntro(){
     </div>
   </section>`;
   document.getElementById('go').onclick=()=>{S.screen='game';render();if(!S.consentDone)openConsent()};
+  document.getElementById('demo').onclick=startDemo;
 }
 
 function renderGame(){
   const t=total(),lim=S.limit,pct=Math.min(100,t/lim*100);
   const cur=STAGES[S.opened-1];
-  app.innerHTML=`
+  app.innerHTML=`${demoBar()}
   <header class="top">
     <div><div class="eyebrow">Уровень 1 · ${esc(CASE.title)}</div><h1>Сценарий за час</h1>
       <p class="rq">Исследовательский вопрос: <b>${esc(CASE.rq)}</b></p></div>
@@ -463,6 +468,7 @@ function diceHTML(cur){
 }
 
 function bindGame(){
+  bindDemoBar();
   app.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{S.active=b.dataset.tab;render()});
   app.querySelectorAll('[data-card]').forEach(b=>b.onclick=()=>openCompose(b.dataset.card));
   app.querySelectorAll('[data-flip]').forEach(b=>b.onclick=()=>{S.flipped[b.dataset.flip]=!S.flipped[b.dataset.flip];render()});
@@ -629,7 +635,7 @@ function guideRows(){
 const PRN={must:'● ОБЯЗАТЕЛЬНО',can:'○ МОЖНО СОКРАТИТЬ',cut:'■ ОТСЕКАЮЩИЙ'};
 function renderGuide(){
   const {rows,reserve,fmt}=guideRows();
-  app.innerHTML=`
+  app.innerHTML=`${demoBar()}
   <header class="top"><div><div class="eyebrow">Готовый гайд · ${esc(CASE.title)}</div><h1>Ваш сценарий за ${S.limit} минут</h1>
   <p class="rq">Исследовательский вопрос: <b>${esc(CASE.rq)}</b></p></div>
   <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn ghost" id="back">Вернуться к канвасу</button><button class="btn accent" id="copy">Скопировать для Excel</button></div></header>
@@ -641,6 +647,7 @@ function renderGuide(){
   <p style="margin:0;max-width:70ch">Вставьте таблицу в Excel или Google Таблицы: кнопка копирует её с разделителями колонок. Сравните свои формулировки с эталонами и проведите пилотное интервью: после первого разговора гайд обычно правят.</p>
   <div id="fallback"></div>
   <div><button class="btn ghost" id="again">Сыграть ещё раз</button></div></section>`;
+  bindDemoBar();
   document.getElementById('back').onclick=()=>{S.screen='game';render()};
   document.getElementById('again').onclick=()=>{S=fresh();S.screen='game';render();openConsent()};
   document.getElementById('copy').onclick=()=>{
@@ -650,6 +657,53 @@ function renderGuide(){
     const fb=()=>{const f=document.getElementById('fallback');f.innerHTML='<p style="margin:0;font-size:14px">Скопируйте текст вручную:</p><textarea class="copyfall" id="fbta" readonly></textarea>';const t=document.getElementById('fbta');t.value=tsv;t.select()};
     try{navigator.clipboard.writeText(tsv).then(()=>toast('Таблица скопирована. Вставьте её в Excel'),fb)}catch(e){fb()}
   };
+}
+
+/* ===================== ДЕМО И ЭКСКУРСИЯ ===================== */
+let saved=null;
+function demoState(){
+  const st=fresh();st.demo=true;st.screen='game';st.consent=[true,true,true,true];st.consentDone=true;st.opened=6;st.active='h1';
+  st.rolls={intro:3,vvod:4,h1:5,h2:1,h3:3,fin:5};st.caseLog=['С8'];st.deck=st.deck.filter(x=>x!=='С8');st.flipped={'Г1':true};
+  const q=(stage,card,probes)=>{const c=green(card);return{uid:uid(),stage,card,text:c.e.replace(/^«|»$/g,'').replace(/» Перед.*$/,''),min:c.min,hyp:stage.startsWith('h')?{h1:'Г1',h2:'Г2',h3:'Г3'}[stage]:'',probes:(probes||[]).map(([id,t])=>({card:id,text:t})),cut:!!c.cut}};
+  st.items=[q('intro','З1'),q('intro','З4'),q('vvod','В1'),q('vvod','В3'),
+    q('h1','К1',[['П11','Почему именно история?']]),q('h1','К6',[['П6','А последний раз как было?']]),
+    q('h2','К2',[['П8','Не видят?']]),q('h2','К7',[['П3','А что было после этого?']]),
+    q('h3','К8',[['П7','Покажите, где вы это делали']]),q('h3','К9',[['П9','Что вы имели в виду под «неудобно»?']]),
+    q('fin','Зк1')];
+  return st;
+}
+function startDemo(){saved=S.demo?saved:S;S=demoState();render();window.scrollTo(0,0);startTour()}
+function exitDemo(toGame){endTour();S=saved||fresh();saved=null;if(toGame){S=fresh();S.screen='game'}render();window.scrollTo(0,0);if(toGame)openConsent()}
+function demoBar(){return S.demo?`<div class="demobar"><span><b>Демо.</b> Пример собранного гайда по эталонам. Ваш прогресс не затронут.</span><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small ghost" data-tour>Экскурсия</button><button class="btn small accent" data-play>Начать свою партию</button><button class="btn small ghost" data-exit>Выйти из демо</button></span></div>`:''}
+function bindDemoBar(){
+  app.querySelectorAll('[data-tour]').forEach(b=>b.onclick=()=>{if(S.screen!=='game'){S.screen='game';render()}startTour()});
+  app.querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>exitDemo(true));
+  app.querySelectorAll('[data-exit]').forEach(b=>b.onclick=()=>exitDemo(false));
+}
+const TOUR=[
+  {sel:'.rq',t:'Исследовательский вопрос',d:'Партия начинается с вопроса, на который должно ответить интервью. Всё, что не помогает на него ответить, в гайд не попадает.'},
+  {sel:'.meter',t:'Лимит 60 минут',d:'Каждая карта стоит минут. Счётчик показывает длину сценария, штриховка в конце — резерв 5 минут. Карта, которая не влезает, не кладётся.'},
+  {sel:'.stage[data-stage="intro"] .consent',t:'Сначала согласие',d:'Канвас закрыт, пока игрок не отметит 4 пункта информированного согласия. Исследование начинается только после него.'},
+  {sel:'.side .panel',t:'Кубик в начале каждого этапа',d:'Нечет — спокойный этап. Чёт — карта случая: плохой вопрос, который надо исправить, или вводная от заказчика с выбором ответа. В демо на вводных выпала 4 и вводная «Добавьте вопрос про цены» — правильный ответ: отказать.'},
+  {sel:'.lib',t:'Библиотека карт-формул',d:'Игрок выбирает карту, пишет свой вопрос под кейс, проходит самопроверку и сравнивает с эталоном опытного исследователя. Только после этого вопрос ложится на канвас.'},
+  {sel:'.stage[data-stage="h1"]',t:'Цепочки гипотез',d:'Карта гипотезы переворачивается: видно, из какого факта она выросла и что её подтвердит. В цепочке 2 ключевых вопроса, у каждого жёлтая проба. Следующая гипотеза открывается, когда цепочка собрана.'},
+  {sel:'.side .panel:nth-child(2)',t:'Чек-лист вместо очков',d:'Программа проверяет гайд: согласие, покрытие гипотез, пробы, заключение, резерв, вопросы вне цели. Когда всё зелёное, можно собрать гайд.'},
+  {sel:'#build',t:'Готовый гайд',d:'Канвас превращается в таблицу: этап, вопрос, длительность, накопительное время, приоритет, гипотеза, пробы. Её можно скопировать в Excel.',last:true}
+];
+let tourI=-1;
+function startTour(){tourI=0;showTour()}
+function endTour(){tourI=-1;document.querySelectorAll('.tour-hl').forEach(e=>e.classList.remove('tour-hl'));const t=document.getElementById('tour');if(t)t.remove()}
+function showTour(){
+  document.querySelectorAll('.tour-hl').forEach(e=>e.classList.remove('tour-hl'));
+  const step=TOUR[tourI];const el=document.querySelector(step.sel);
+  if(el){el.classList.add('tour-hl');el.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'})}
+  let box=document.getElementById('tour');if(!box){box=document.createElement('div');box.id='tour';box.className='tour';box.setAttribute('role','dialog');document.body.appendChild(box)}
+  box.innerHTML=`<div class="eyebrow">Экскурсия · ${tourI+1} из ${TOUR.length}</div><h3>${esc(step.t)}</h3><p>${esc(step.d)}</p>
+  <div class="mfoot"><button class="btn ghost small" id="tx">Закрыть</button>${tourI?'<button class="btn ghost small" id="tp">Назад</button>':''}${step.last?'<button class="btn accent small" id="tg">Показать гайд</button>':'<button class="btn accent small" id="tn">Далее</button>'}</div>`;
+  box.querySelector('#tx').onclick=endTour;
+  const tp=box.querySelector('#tp');if(tp)tp.onclick=()=>{tourI--;showTour()};
+  const tn=box.querySelector('#tn');if(tn){tn.onclick=()=>{tourI++;showTour()};tn.focus()}
+  const tg=box.querySelector('#tg');if(tg){tg.onclick=()=>{endTour();S.screen='guide';render();window.scrollTo(0,0)};tg.focus()}
 }
 
 /* ===================== ПРОЧЕЕ ===================== */
