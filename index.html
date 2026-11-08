@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Тренажёр глубинного интервью: собери из карт гайд на 60 минут.">
+<meta name="author" content="Безгласная Елена Алексеевна">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
 <title>Сценарий за час</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -178,6 +179,8 @@ td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:n
 .tour-hl{outline:3px solid var(--accent);outline-offset:4px;border-radius:10px;position:relative;z-index:30}
 .tour{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));width:min(560px,calc(100% - 32px));background:var(--surface);border:1.5px solid var(--ink);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);z-index:55;display:flex;flex-direction:column;gap:8px}
 .tour h3{font-size:17px}.tour p{margin:0;font-size:14px}
+.foot{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+.foot a{color:var(--muted)}
 .copyfall{width:100%;min-height:140px;font-family:var(--f-mono);font-size:12px}
 </style>
 </head>
@@ -337,6 +340,7 @@ function checklist(){
 
 /* ===================== ОТРИСОВКА ===================== */
 const app=document.getElementById('app');
+const FOOT=`<footer class="foot">© 2026 Безгласная Е. А. · <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/deed.ru" target="_blank" rel="noopener">CC BY-NC-ND 4.0</a> · <a href="https://github.com/helenforcevoice-ai/interview-game" target="_blank" rel="noopener">Исходники на GitHub</a></footer>`;
 function render(){save();if(S.screen==='intro')return renderIntro();if(S.screen==='guide')return renderGuide();renderGame()}
 
 function cardHTML(c,kind,extra=''){
@@ -361,7 +365,7 @@ function renderIntro(){
       ${cardHTML({id:'П11',min:1},'yellow','«Почему?»')}
       ${cardHTML({id:'С6'},'red','«Как вы обычно публикуете фото?»')}
     </div>
-  </section>`;
+  </section>${FOOT}`;
   document.getElementById('go').onclick=()=>{S.screen='game';render();if(!S.consentDone)openConsent()};
   document.getElementById('demo').onclick=startDemo;
 }
@@ -387,7 +391,7 @@ function renderGame(){
       <div class="panel"><div class="eyebrow">Чек-лист гайда</div><ul class="checks">${checklist().map(c=>`<li class="${c.ok?'ok':'no'}"><span class="mk">${c.ok?'✓':'·'}</span><span>${esc(c.t)}</span></li>`).join('')}</ul>
         <button class="btn accent" id="build" ${checklist().every(c=>c.ok)&&S.opened===STAGES.length?'':'disabled'}>Собрать гайд</button></div>
     </aside>
-  </div>`;
+  </div>${FOOT}`;
   bindGame();
 }
 
@@ -646,7 +650,7 @@ function renderGuide(){
   <section class="panel"><div class="eyebrow">Что дальше</div>
   <p style="margin:0;max-width:70ch">Вставьте таблицу в Excel или Google Таблицы: кнопка копирует её с разделителями колонок. Сравните свои формулировки с эталонами и проведите пилотное интервью: после первого разговора гайд обычно правят.</p>
   <div id="fallback"></div>
-  <div><button class="btn ghost" id="again">Сыграть ещё раз</button></div></section>`;
+  <div><button class="btn ghost" id="again">Сыграть ещё раз</button></div></section>${FOOT}`;
   bindDemoBar();
   document.getElementById('back').onclick=()=>{S.screen='game';render()};
   document.getElementById('again').onclick=()=>{S=fresh();S.screen='game';render();openConsent()};
