@@ -462,7 +462,7 @@ function bindMailForm(rows,reserve){
     e.preventDefault();if(send.disabled)return;
     send.disabled=true;status.textContent=M.sending;
     const addr=email.value.trim();
-    const payload={type:'guide',email:addr,news:f.querySelector('#mNews').checked,trap:f.querySelector('#mSite').value,
+    const payload={type:'guide',email:addr,news:f.querySelector('#mNews').checked,demo:!!S.demo,trap:f.querySelector('#mSite').value,
       session_id:session.id,case_id:CASE.id,case_title:S.demo?M.demoTitle(CASE.title):CASE.title,rq:CASE.rq,limit:S.limit,situations:S.caseLog.join(' '),
       head:TEXTS.guide.head,
       rows:rows.map(r=>[r.n,r.st,r.text,r.d,r.acc,TEXTS.guide.priority[r.pr],r.h,r.p])
