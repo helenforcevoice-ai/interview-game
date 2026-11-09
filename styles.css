@@ -207,3 +207,6 @@ td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:n
 .check a{color:var(--accent)}
 .trap{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
 @media print{.no-copy{display:none}}
+
+/* Название карты в строке канваса: не шире колонки, длинное переносится */
+.q .id{max-width:9em;overflow-wrap:anywhere;line-height:1.3}

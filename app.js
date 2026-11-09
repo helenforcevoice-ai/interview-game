@@ -19,6 +19,16 @@ const situation=id=>CASE.situations.find(c=>c.id===id);
 const isChain=st=>!!st.hyp;
 const lastStage=()=>STAGES.length-1;
 const chainMinDefault=Math.min(...STAGES.filter(isChain).map(s=>s.min));
+const chainCount=STAGES.filter(isChain).length;
+/* На экране и в гайде только названия, коды карт остаются внутренними */
+const hypName=h=>h&&CASE.hypotheses[h]?CASE.hypotheses[h].name:'';
+const cardName=id=>card(id).name;
+function itemLabel(it){
+  if(it.off)return TEXTS.situation.offLabel;
+  if(it.card)return cardName(it.card);
+  const c=situation(it.case);
+  return c.kind==='bad'?c.type:TEXTS.situation.briefLabel;
+}
 
 /* ===================== СОСТОЯНИЕ ===================== */
 function fresh(){return{
@@ -30,19 +40,7 @@ function fresh(){return{
   items:[],flipped:{},
   sent:null
 }}
-function load(){
-  try{
-    const r=localStorage.getItem(CONFIG.storageKey);if(r)return JSON.parse(r);
-    const old=localStorage.getItem(CONFIG.legacyStorageKey);return old?fromLegacy(JSON.parse(old)):null;
-  }catch(e){return null}
-}
-/* Партия, начатая в прошлой версии: правила вводных восстанавливаются по сыгранным случаям */
-function fromLegacy(o){
-  const st=Object.assign(fresh(),o,{limit:CASE.limit,chainMin:null,required:[]});
-  delete st.k7req;
-  st.caseLog.forEach(id=>{const c=situation(id);if(c)applySituation(c,st)});
-  return st;
-}
+function load(){try{const r=localStorage.getItem(CONFIG.storageKey);return r?JSON.parse(r):null}catch(e){return null}}
 function save(){if(S.demo)return;try{localStorage.setItem(CONFIG.storageKey,JSON.stringify(S))}catch(e){}}
 let S=load()||fresh();
 
@@ -87,9 +85,9 @@ function checklist(){
   const T=TEXTS.checklist,chains=STAGES.filter(isChain);
   const L=[
     {t:T.consent,ok:S.consentDone},
-    {t:T.chains(S.chainMin||chainMinDefault),ok:chains.every(s=>stageIdx(s.id)<S.opened&&realItems(s.id).length>=need(s))}
+    {t:T.chains(S.chainMin||chainMinDefault,chainCount),ok:chains.every(s=>stageIdx(s.id)<S.opened&&realItems(s.id).length>=need(s))}
   ];
-  S.required.forEach(r=>L.push({t:T.required(stage(r.stage).hyp,r.card,r.label),ok:realItems(r.stage).some(it=>it.card===r.card)}));
+  S.required.forEach(r=>L.push({t:T.required(hypName(stage(r.stage).hyp),cardName(r.card),r.label),ok:realItems(r.stage).some(it=>it.card===r.card)}));
   L.push(
     {t:T.probes,ok:chains.every(s=>realItems(s.id).every(it=>it.probes.length>=1))&&chains.some(s=>realItems(s.id).length)},
     {t:T.fin,ok:realItems(STAGES[lastStage()].id).length>=1},
@@ -109,7 +107,7 @@ function footer(){
 }
 function render(){save();if(S.screen==='intro')return renderIntro();if(S.screen==='guide')return renderGuide();renderGame()}
 function cardHTML(c){
-  return `<div class="card ${c.kind}"><div class="hd"><span>${esc(c.id)}</span><span>${c.min?esc(TEXTS.game.min(c.min)):''}</span></div><div class="bd">${esc(c.text)}</div></div>`;
+  return `<div class="card ${c.kind}"><div class="hd"><span>${esc(c.label)}</span><span>${c.min?esc(TEXTS.game.min(c.min)):''}</span></div><div class="bd">${esc(c.text)}</div></div>`;
 }
 
 /* ===================== ЭКРАН: СТАРТ ===================== */
@@ -121,6 +119,7 @@ function renderIntro(){
     <div class="stack">
       <h2 class="hero-title">${esc(T.title(CASE.limit))}</h2>
       <p>${esc(T.lead)}</p>
+      <p class="note m0">${esc(T.caveat)}</p>
       <div class="levels">${T.levels.map(l=>`<div class="lvl ${l.open?'on':''}"><div><b>${esc(l.name)}</b>${l.sub?`<br><span class="lvl-sub">${esc(l.sub(CASE.title))}</span>`:''}</div><span class="st">${esc(l.status)}</span></div>`).join('')}</div>
       <div class="row-btns"><button class="btn accent" id="go">${esc(T.start)}</button><button class="btn ghost" id="demo">${esc(T.demo)}</button></div>
       <p class="fine"><a href="${CONFIG.links.privacy}" target="_blank" rel="noopener">${esc(TEXTS.privacy)}</a></p>
@@ -147,7 +146,7 @@ function renderGame(){
   </header>
   <div class="board">
     <aside class="panel lib" aria-label="${esc(G.libAria)}">${libHTML()}</aside>
-    <main class="canvas" aria-label="${esc(G.canvasAria)}">${STAGES.map(stageHTML).join('')}</main>
+    <main class="canvas" aria-label="${esc(G.canvasAria)}">${canvasHTML()}</main>
     <aside class="side">
       <div class="panel">${diceHTML(cur)}</div>
       <div class="panel"><div class="eyebrow">${esc(G.checklistLabel)}</div><ul class="checks">${checklist().map(c=>`<li class="${c.ok?'ok':'no'}"><span class="mk">${c.ok?'✓':'·'}</span><span>${esc(c.t)}</span></li>`).join('')}</ul>
@@ -168,7 +167,7 @@ function libHTML(){
   return `<div class="eyebrow">${esc(G.libLabel)}</div>
   <div class="tabs" role="group" aria-label="${esc(G.stageAria)}">${STAGES.slice(0,S.opened).map(s=>`<button data-tab="${s.id}" aria-pressed="${s.id===S.active}">${esc(s.name)}</button>`).join('')}</div>
   ${why?`<div class="lib empty">${esc(why)}</div>`:''}
-  <div class="cards">${list.map(c=>{const u=used.has(c.id);return `<button class="card green" data-card="${c.id}" ${u||!can?'disabled':''} aria-label="${esc(G.cardAria(c.id))}"><div class="hd"><span>${esc(c.id)}${u?esc(G.played):''}</span><span>${esc(G.min(c.min))}</span></div><div class="bd">${esc(c.f)}${c.h?`<div class="tags">${c.h.map(h=>`<span class="tag ${h===st.hyp?'on':''}">${esc(h)}</span>`).join('')}</div>`:''}</div></button>`}).join('')||`<div class="empty">${esc(G.noCards)}</div>`}</div>`;
+  <div class="cards">${list.map(c=>{const u=used.has(c.id);return `<button class="card green" data-card="${c.id}" ${u||!can?'disabled':''} aria-label="${esc(G.cardAria(c.name))}"><div class="hd"><span>${esc(c.name)}${u?esc(G.played):''}</span><span>${esc(G.min(c.min))}</span></div><div class="bd">${esc(c.f)}${c.h?`<div class="tags">${c.h.filter(h=>STAGES.some(s=>s.hyp===h)).map(h=>`<span class="tag ${h===st.hyp?'on':''}">${esc(hypName(h))}</span>`).join('')}</div>`:''}</div></button>`}).join('')||`<div class="empty">${esc(G.noCards)}</div>`}</div>`;
 }
 
 function stageHTML(st,i){
@@ -176,12 +175,12 @@ function stageHTML(st,i){
   if(i>=S.opened)return `<section class="stage locked"><div class="sh"><h3>${esc(st.name)}</h3><span class="need">${esc(G.locked)}</span></div></section>`;
   const met=stageMet(st),isCur=i===S.opened-1,have=realItems(st.id).length;
   const needTxt=isChain(st)
-    ?G.needChain(have,need(st))+requiredIn(st.id).map(r=>G.needCard(r.card)).join('')
+    ?G.needChain(have,need(st))+requiredIn(st.id).map(r=>G.needCard(cardName(r.card))).join('')
     :G.needPlain(have,st.min);
   let hyp='';
   if(isChain(st)){
     const H=CASE.hypotheses[st.hyp],f=S.flipped[st.hyp];
-    hyp=`<div class="hyp"><div class="eyebrow">${esc(st.hyp)} · ${esc(G.hypLink)} ${esc(H.link)}</div><div class="front">${esc(H.front)}</div>
+    hyp=`<div class="hyp"><div class="eyebrow">${esc(H.name)} · ${esc(G.hypLink)} ${esc(H.link)}</div><div class="front">${esc(H.front)}</div>
     ${f?`<div class="back"><span><b>${esc(G.hypFact)}</b> ${esc(H.fact)}</span><span><b>${esc(G.hypYes)}</b> ${esc(H.yes)}</span><span><b>${esc(G.hypNo)}</b> ${esc(H.no)}</span></div>`:''}
     <button class="linkbtn self-start" data-flip="${st.hyp}">${esc(f?G.flipBack:G.flip)}</button></div>`;
   }
@@ -192,6 +191,16 @@ function stageHTML(st,i){
     ${stageItems(st.id).map(it=>qHTML(it,st)).join('')}
     ${nextStep(st,i,met,isCur)}
   </section>`;
+}
+/* Ветки других гипотез показаны после последней ветки кейса: в реальном гайде они шли бы здесь */
+function canvasHTML(){
+  const stages=STAGES.map(stageHTML),lastChain=STAGES.map(isChain).lastIndexOf(true);
+  if(lastChain>=0)stages.splice(lastChain+1,0,...(CASE.otherBranches||[]).map(branchHTML));
+  return stages.join('');
+}
+function branchHTML(h){
+  const G=TEXTS.game,H=CASE.hypotheses[h];
+  return `<section class="stage locked"><div class="sh"><h3>${esc(G.branchLabel(H.name))}</h3></div><p class="m0 locknote">${esc(H.front)}</p><p class="m0 note">${esc(G.branchNote)}</p></section>`;
 }
 const consentText=()=>CASE.consent.text+(S.consentExtra.length?' '+S.consentExtra.join('. '):'');
 
@@ -204,7 +213,7 @@ function nextStep(st,i,met,isCur){
     const miss=missingRequired(st.id);
     if(q.length<n)hint=H.addMore(n-q.length);
     else if(isChain(st)&&q.some(it=>!it.probes.length))hint=H.probe;
-    else if(miss.length)hint=H.card(miss[0].card);
+    else if(miss.length)hint=H.card(cardName(miss[0].card));
     else if(isCur&&!last)hint=H.minDone;
     else if(isCur)hint=H.finDone;
     if(canAddTo(st))btns+=`<button class="btn ghost small" data-add="${st.id}">${esc(G.btn.add)}</button>`;
@@ -218,8 +227,8 @@ function nextStep(st,i,met,isCur){
 function qHTML(it,st){
   const G=TEXTS.game,isKey=isChain(st)&&!it.off;
   return `<div class="q ${it.case?'case':''} ${it.off?'off':''}">
-    <span class="id">${esc(it.card||it.case||'!')}</span><span class="txt">${esc(it.text)}${it.off?`<br><small class="off-note">${esc(G.offTarget)}</small>`:''}</span><span class="min">${esc(G.min(itemMins(it)))}</span>
-    ${it.probes&&it.probes.length?`<div class="probes">${it.probes.map(p=>`<div class="probe"><b>${esc(p.card)}</b> ${esc(p.text)}</div>`).join('')}</div>`:''}
+    <span class="id">${esc(itemLabel(it))}</span><span class="txt">${esc(it.text)}${it.off?`<br><small class="off-note">${esc(G.offTarget)}</small>`:''}</span><span class="min">${esc(G.min(itemMins(it)))}</span>
+    ${it.probes&&it.probes.length?`<div class="probes">${it.probes.map(p=>`<div class="probe"><b>${esc(probe(p.card).n)}</b> ${esc(p.text)}</div>`).join('')}</div>`:''}
     <div class="acts">${isKey&&it.probes.length<CONFIG.maxProbes?`<button class="linkbtn" data-probe="${it.uid}">${esc(G.addProbe(CONFIG.probeMinutes))}</button>`:''}<button class="linkbtn muted" data-del="${it.uid}">${esc(G.remove)}</button></div>
   </div>`;
 }
@@ -299,7 +308,7 @@ function openConsent(){
 function openCompose(id){
   const T=TEXTS.compose,c=card(id),st=stage(S.active),left=minutesLeft();
   const checks=(c.checks||STD_CHECKS).concat(isChain(st)?[T.checksHyp(st.hyp)]:[]);
-  openModal(`<div class="eyebrow">${esc(c.id)} · ${esc(st.name)} · ${esc(TEXTS.game.min(c.min))}</div>
+  openModal(`<div class="eyebrow">${esc(c.name)} · ${esc(st.name)} · ${esc(TEXTS.game.min(c.min))}</div>
   <div class="formula">${esc(c.f)}</div>
   ${c.min>left?`<div class="etalon redbg">${esc(T.noFit(left,S.limit))}</div>`:''}
   <label for="qt" class="eyebrow">${esc(T.label)}</label>
@@ -319,7 +328,7 @@ function openCompose(id){
 function openPicker(stId){
   const T=TEXTS.compose,st=stage(stId),used=usedIds();
   openModal(`<div class="eyebrow">${esc(T.pickKicker(st.name))}</div><h2>${esc(T.pickTitle)}</h2>
-  <div class="opts">${cardsFor(st).map(c=>`<button class="opt" data-pick="${c.id}" ${used.has(c.id)?'disabled':''}><b>${esc(c.id)}</b> · ${esc(TEXTS.game.min(c.min))}${used.has(c.id)?esc(TEXTS.game.played):''}<br>${esc(c.f)}</button>`).join('')}</div>
+  <div class="opts">${cardsFor(st).map(c=>`<button class="opt" data-pick="${c.id}" ${used.has(c.id)?'disabled':''}><b>${esc(c.name)}</b> · ${esc(TEXTS.game.min(c.min))}${used.has(c.id)?esc(TEXTS.game.played):''}<br>${esc(c.f)}</button>`).join('')}</div>
   <div class="mfoot"><button class="btn ghost" id="cx">${esc(T.cancel)}</button></div>`,'green',ov=>{
     ov.querySelector('#cx').onclick=closeModal;
     ov.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{closeModal();openCompose(b.dataset.pick)});
@@ -330,7 +339,7 @@ function openProbe(itemUid){
   const T=TEXTS.probe,it=S.items.find(x=>x.uid===itemUid),used=usedIds(),left=minutesLeft(),cost=CONFIG.probeMinutes;
   openModal(`<div class="eyebrow">${esc(T.kicker(cost))}</div><h2>${esc(T.title)}</h2>
   <div class="etalon sunk"><div class="eyebrow">${esc(T.question)}</div>${esc(it.text)}</div>
-  <div class="chips" role="group" aria-label="${esc(T.aria)}">${PROBES.map(p=>`<button class="chip" data-p="${p.id}" aria-pressed="false" ${used.has(p.id)?'disabled':''}>${esc(p.id)} ${esc(p.n)}</button>`).join('')}</div>
+  <div class="chips" role="group" aria-label="${esc(T.aria)}">${PROBES.map(p=>`<button class="chip" data-p="${p.id}" aria-pressed="false" ${used.has(p.id)?'disabled':''}>${esc(p.n)}</button>`).join('')}</div>
   <div id="pinfo" class="etalon yellowbg" hidden></div>
   ${left<cost?`<div class="etalon redbg">${esc(T.noTime)}</div>`:''}
   <label for="pt" class="eyebrow">${esc(T.label)}</label><textarea id="pt" placeholder="${esc(T.placeholder)}"></textarea>
@@ -353,7 +362,7 @@ function openSituation(id){
 }
 function openBadQuestion(c){
   const T=TEXTS.situation,st=STAGES[S.opened-1],mins=st.fixMin;
-  openModal(`<div class="eyebrow">${esc(T.badKicker(c.id,c.type))}</div><h2>${esc(T.badTitle)}</h2>
+  openModal(`<div class="eyebrow">${esc(T.badKicker(c.type))}</div><h2>${esc(T.badTitle)}</h2>
   <div class="etalon redbg"><div class="eyebrow">${esc(T.onCard)}</div><div class="formula">${esc(c.q)}</div></div>
   <p class="m0 note">${esc(T.willGo(st.name,mins))}</p>
   <label for="qt" class="eyebrow">${esc(T.yourVersion)}</label><textarea id="qt"></textarea>
@@ -369,7 +378,7 @@ function openBadQuestion(c){
 }
 function openBrief(c){
   const T=TEXTS.situation,st=STAGES[S.opened-1];
-  openModal(`<div class="eyebrow">${esc(T.briefKicker(c.id))}</div><h2>${esc(c.q)}</h2>
+  openModal(`<div class="eyebrow">${esc(T.briefKicker)}</div><h2>${esc(c.q)}</h2>
   <p class="m0">${esc(T.briefLead)}</p>
   <div class="opts">${c.opts.map((o,k)=>`<button class="opt" data-o="${k}">${esc(o.t)}</button>`).join('')}</div>
   <div id="res" hidden></div>
@@ -409,7 +418,7 @@ function guideRows(){
       let pr=k===0?'must':'can';
       if(it.cut)pr='cut';
       if(isRequiredCard(st.id,it.card))pr='must';
-      push({st:st.name,text:it.text,d:itemMins(it),pr,h:it.hyp,p:it.probes.map(p=>p.text).join(' / ')});
+      push({st:st.name,text:it.text,d:itemMins(it),pr,h:hypName(it.hyp),p:it.probes.map(p=>p.text).join(' / ')});
     });
   });
   return {rows,reserve:S.limit-acc};
@@ -427,6 +436,7 @@ function renderGuide(){
   ${mailFormHTML()}
   <section class="panel"><div class="eyebrow">${esc(T.nextLabel)}</div>
   <p class="m0 measure">${esc(T.nextText)}</p>
+  ${(CASE.otherBranches||[]).length?`<p class="m0 measure note">${esc(T.branchesNote(CASE.otherBranches.map(hypName)))}</p>`:''}
   <div><button class="btn ghost" id="again">${esc(T.again)}</button></div></section>${footer()}`;
   bindDemoBar();
   const table=document.getElementById('guideTable');
@@ -490,7 +500,7 @@ const session={
 function track(event,details){
   if(!CONFIG.scriptUrl||S.demo&&event!=='demo_open')return;
   const body=JSON.stringify({type:'game_event',event,session_id:session.id,device:session.device(),details:details||'',case_id:CASE.id});
-  try{fetch(CONFIG.scriptUrl,{method:'POST',body,headers:{'Content-Type':'text/plain;charset=utf-8'},keepalive:true,mode:'no-cors'})}catch(e){}
+  try{fetch(CONFIG.scriptUrl,{method:'POST',body,headers:{'Content-Type':'text/plain;charset=utf-8'},keepalive:true,mode:'no-cors'}).catch(()=>{})}catch(e){}
 }
 
 /* ===================== ДЕМО И ЭКСКУРСИЯ ===================== */
