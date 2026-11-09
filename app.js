@@ -1,4 +1,4 @@
-/* Логика игры «Сценарий за час»
+/* Логика игры «Сценарий глубинного интервью»
    Данные и тексты лежат в content.js, настройки в config.js
    Здесь только правила и отрисовка: ни одного текста интерфейса и номера карты */
 
@@ -117,7 +117,7 @@ function renderIntro(){
   <header class="top"><div><div class="eyebrow">${esc(TEXTS.appKicker)}</div><h1>${esc(TEXTS.appName)}</h1></div></header>
   <section class="hero">
     <div class="stack">
-      <h2 class="hero-title">${esc(T.title(CASE.limit))}</h2>
+      <h2 class="hero-title">${esc(T.title)}</h2>
       <p>${esc(T.lead)}</p>
       <p class="note m0">${esc(T.caveat)}</p>
       <div class="levels">${T.levels.map(l=>`<div class="lvl ${l.open?'on':''}"><div><b>${esc(l.name)}</b>${l.sub?`<br><span class="lvl-sub">${esc(l.sub(CASE.title))}</span>`:''}</div><span class="st">${esc(l.status)}</span></div>`).join('')}</div>
@@ -426,7 +426,7 @@ function guideRows(){
 function renderGuide(){
   const T=TEXTS.guide,{rows,reserve}=guideRows();
   app.innerHTML=`${demoBar()}
-  <header class="top"><div><div class="eyebrow">${esc(T.kicker(CASE.title))}</div><h1>${esc(T.title(S.limit))}</h1>
+  <header class="top"><div><div class="eyebrow">${esc(T.kicker(CASE.title))}</div><h1>${esc(T.title)}</h1>
   <p class="rq">${esc(TEXTS.game.rqLabel)} <b>${esc(CASE.rq)}</b></p></div>
   <div class="row-btns"><button class="btn ghost" id="back">${esc(T.back)}</button></div></header>
   <div class="tablewrap no-copy" id="guideTable"><table><thead><tr>${T.head.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>
@@ -436,7 +436,7 @@ function renderGuide(){
   ${mailFormHTML()}
   <section class="panel"><div class="eyebrow">${esc(T.nextLabel)}</div>
   <p class="m0 measure">${esc(T.nextText)}</p>
-  ${(CASE.otherBranches||[]).length?`<p class="m0 measure note">${esc(T.branchesNote(CASE.otherBranches.map(hypName)))}</p>`:''}
+  ${(CASE.otherBranches||[]).length?`<div class="measure note"><p class="m0">${esc(T.branchesNote)}</p><ul class="branch-list">${CASE.otherBranches.map(h=>`<li>${esc(CASE.hypotheses[h].front)}</li>`).join('')}</ul></div>`:''}
   <div><button class="btn ghost" id="again">${esc(T.again)}</button></div></section>${footer()}`;
   bindDemoBar();
   const table=document.getElementById('guideTable');
