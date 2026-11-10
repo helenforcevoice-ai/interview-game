@@ -211,3 +211,16 @@ td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:n
 /* Название карты в строке канваса: не шире колонки, длинное переносится */
 .q .id{max-width:9em;overflow-wrap:anywhere;line-height:1.3}
 .branch-list{margin:6px 0 0;padding-left:20px}
+
+/* Следующее действие подсвечено, чтобы путь был очевиден */
+.next-action{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 45%,transparent);animation:nudge 1.6s ease-in-out infinite}
+.linkbtn.next-action{border-radius:4px;padding:1px 4px}
+@keyframes nudge{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 15%,transparent)}}
+@media (prefers-reduced-motion:reduce){.next-action{animation:none}}
+.nexthint.warn{background:var(--red-soft)}
+.checks .bad{color:var(--red)} .checks .bad .mk{color:var(--red)}
+.q.extra{border-style:dashed;border-color:var(--yellow)}
+.extra-note{color:var(--yellow);font-weight:600}
+.probe{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.probe .linkbtn{font-size:12px;white-space:nowrap}
+.probe.extra{outline:1.5px dashed var(--yellow)}

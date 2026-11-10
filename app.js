@@ -56,7 +56,8 @@ function applySituation(c,target=S){
 /* ===================== ПРАВИЛА ===================== */
 const itemMins=it=>it.min+(it.probes?it.probes.length*CONFIG.probeMinutes:0);
 const total=()=>CONFIG.consentMinutes+S.items.reduce((a,it)=>a+itemMins(it),0);
-const minutesLeft=()=>S.limit-total();
+const budget=()=>S.limit-CONFIG.reserveMinutes;          // сколько можно занять, не трогая резерв
+const minutesLeft=()=>budget()-total();
 const stageItems=id=>S.items.filter(it=>it.stage===id);
 const realItems=id=>stageItems(id).filter(it=>!it.off);
 const need=st=>isChain(st)&&S.chainMin?S.chainMin:st.min;
@@ -84,20 +85,28 @@ function cardsFor(st){
 function checklist(){
   const T=TEXTS.checklist,chains=STAGES.filter(isChain);
   const L=[
-    {t:T.consent,ok:S.consentDone},
-    {t:T.chains(S.chainMin||chainMinDefault,chainCount),ok:chains.every(s=>stageIdx(s.id)<S.opened&&realItems(s.id).length>=need(s))}
+    {k:'consent',t:T.consent,ok:S.consentDone},
+    {k:'chains',t:T.chains(S.chainMin||chainMinDefault,chainCount),ok:chains.every(s=>stageIdx(s.id)<S.opened&&realItems(s.id).length>=need(s))}
   ];
-  S.required.forEach(r=>L.push({t:T.required(hypName(stage(r.stage).hyp),cardName(r.card),r.label),ok:realItems(r.stage).some(it=>it.card===r.card)}));
+  S.required.forEach(r=>L.push({k:'required',t:T.required(hypName(stage(r.stage).hyp),cardName(r.card),r.label),ok:realItems(r.stage).some(it=>it.card===r.card)}));
   L.push(
-    {t:T.probes,ok:chains.every(s=>realItems(s.id).every(it=>it.probes.length>=1))&&chains.some(s=>realItems(s.id).length)},
-    {t:T.fin,ok:realItems(STAGES[lastStage()].id).length>=1},
-    {t:T.reserve(CONFIG.reserveMinutes),ok:total()<=S.limit-CONFIG.reserveMinutes},
-    {t:T.offTarget,ok:!S.items.some(it=>it.off)},
-    {t:T.selfCheck,ok:S.items.length>0}
+    {k:'probes',t:T.probes,ok:chains.every(s=>realItems(s.id).every(it=>it.probes.length>=1))&&chains.some(s=>realItems(s.id).length)},
+    {k:'fin',t:T.fin,ok:realItems(STAGES[lastStage()].id).length>=1},
+    {k:'reserve',t:T.reserve(CONFIG.reserveMinutes),ok:total()<=budget()},
+    {k:'off',t:T.offTarget,ok:!S.items.some(it=>it.off)},
+    {k:'self',t:T.selfCheck,ok:S.items.length>0}
   );
   return L;
 }
 const readyToBuild=()=>checklist().every(c=>c.ok)&&S.opened===STAGES.length;
+const atFinish=()=>S.opened===STAGES.length&&stageMet(STAGES[lastStage()]);
+const overBudget=()=>total()>budget();
+/* Что можно убрать, когда сценарий не влезает: вопросы сверх минимума этапа и вторые пробы */
+function isExtraItem(it){
+  if(it.off)return false;
+  const st=stage(it.stage),list=realItems(st.id);
+  return list.indexOf(it)>=need(st)&&!isRequiredCard(st.id,it.card);
+}
 
 /* ===================== ОТРИСОВКА: ОБЩЕЕ ===================== */
 const app=document.getElementById('app');
@@ -138,8 +147,8 @@ function renderGame(){
   <header class="top">
     <div><div class="eyebrow">${esc(G.level(CASE.title))}</div><h1>${esc(TEXTS.appName)}</h1>
       <p class="rq">${esc(G.rqLabel)} <b>${esc(CASE.rq)}</b></p></div>
-    <div class="meter ${t>lim?'over':''}" aria-live="polite">
-      <div class="row"><span class="eyebrow">${esc(G.meter)}</span><span><span class="big">${t}</span><span class="mono muted">${esc(G.of(lim))}</span></span></div>
+    <div class="meter ${overBudget()?'over':''}" aria-live="polite">
+      <div class="row"><span class="eyebrow">${esc(G.meter)}</span><span><span class="big">${t}</span><span class="mono muted">${esc(G.of(budget()))}</span></span></div>
       <div class="bar"><div class="reserve" style="left:${(lim-CONFIG.reserveMinutes)/lim*100}%;right:0"></div><div class="fill" style="width:${pct}%"></div></div>
       <div class="row meter-note"><span>${esc(G.reserveNote(CONFIG.reserveMinutes))}</span><button class="linkbtn" id="restart">${esc(G.restart)}</button></div>
     </div>
@@ -149,8 +158,8 @@ function renderGame(){
     <main class="canvas" aria-label="${esc(G.canvasAria)}">${canvasHTML()}</main>
     <aside class="side">
       <div class="panel">${diceHTML(cur)}</div>
-      <div class="panel"><div class="eyebrow">${esc(G.checklistLabel)}</div><ul class="checks">${checklist().map(c=>`<li class="${c.ok?'ok':'no'}"><span class="mk">${c.ok?'✓':'·'}</span><span>${esc(c.t)}</span></li>`).join('')}</ul>
-        <button class="btn accent" id="build" ${readyToBuild()?'':'disabled'}>${esc(G.btn.build)}</button></div>
+      <div class="panel"><div class="eyebrow">${esc(G.checklistLabel)}</div><ul class="checks">${checklist().map(c=>`<li class="${c.ok?'ok':atFinish()?'bad':'no'}"><span class="mk">${c.ok?'✓':atFinish()?'!':'·'}</span><span>${esc(c.t)}</span></li>`).join('')}</ul>
+        <button class="btn accent ${readyToBuild()?'next-action':''}" id="build" ${readyToBuild()?'':'disabled'}>${esc(G.btn.build)}</button></div>
     </aside>
   </div>${footer()}`;
   bindGame();
@@ -174,6 +183,7 @@ function stageHTML(st,i){
   const G=TEXTS.game;
   if(i>=S.opened)return `<section class="stage locked"><div class="sh"><h3>${esc(st.name)}</h3><span class="need">${esc(G.locked)}</span></div></section>`;
   const met=stageMet(st),isCur=i===S.opened-1,have=realItems(st.id).length;
+  const step=stageStep(st,i,isCur);
   const needTxt=isChain(st)
     ?G.needChain(have,need(st))+requiredIn(st.id).map(r=>G.needCard(cardName(r.card))).join('')
     :G.needPlain(have,st.min);
@@ -188,8 +198,8 @@ function stageHTML(st,i){
   return `<section class="stage ${st.id===S.active?'active':''}" data-stage="${st.id}">
     <div class="sh"><h3>${i+1}. ${esc(st.name)}</h3><span class="need ${met?'ok':''}">${met?'✓ ':''}${esc(needTxt)}</span></div>
     ${hyp}${consent}
-    ${stageItems(st.id).map(it=>qHTML(it,st)).join('')}
-    ${nextStep(st,i,met,isCur)}
+    ${stageItems(st.id).map(it=>qHTML(it,st,step)).join('')}
+    ${nextStep(st,i,met,isCur,step)}
   </section>`;
 }
 /* Ветки других гипотез показаны после последней ветки кейса: в реальном гайде они шли бы здесь */
@@ -204,32 +214,45 @@ function branchHTML(h){
 }
 const consentText=()=>CASE.consent.text+(S.consentExtra.length?' '+S.consentExtra.join('. '):'');
 
-function nextStep(st,i,met,isCur){
-  const G=TEXTS.game,H=G.hint,q=realItems(st.id),n=need(st),last=i===lastStage();
-  let hint='',btns='';
-  if(!rolled(st.id)){hint=H.roll;btns=`<button class="btn accent small" data-rollhere>${esc(G.btn.roll)}</button>`}
-  else if(S.pendingCase&&isCur){hint=H.pending;btns=`<button class="btn small danger" data-case>${esc(G.btn.openCase)}</button>`}
+/* Подсказка этапа и одно подсвеченное следующее действие (step.focus) */
+function stageStep(st,i,isCur){
+  const H=TEXTS.game.hint,q=realItems(st.id),n=need(st),last=i===lastStage();
+  if(!rolled(st.id))return{hint:H.roll,focus:'roll'};
+  if(S.pendingCase&&isCur)return{hint:H.pending,focus:'case'};
+  const miss=missingRequired(st.id);
+  if(q.length<n)return{hint:H.addMore(n-q.length),focus:'add'};
+  const noProbe=isChain(st)&&q.find(it=>!it.probes.length);
+  if(noProbe)return{hint:H.probe,focus:'probe',uid:noProbe.uid};
+  if(miss.length)return{hint:H.card(cardName(miss[0].card)),focus:'add'};
+  if(!isCur)return{hint:''};
+  if(!last)return{hint:H.minDone,focus:'next'};
+  if(readyToBuild())return{hint:H.finDone,focus:'build'};
+  const fail=checklist().find(c=>!c.ok);
+  if(fail.k==='reserve')return{hint:H.overBudget(total()-budget(),CONFIG.reserveMinutes),warn:true};
+  if(fail.k==='off')return{hint:H.offTarget,warn:true};
+  return{hint:H.fixItem(fail.t),warn:true};
+}
+function nextStep(st,i,met,isCur,step){
+  const G=TEXTS.game,last=i===lastStage(),hl=f=>step.focus===f&&isCur?'next-action':'';
+  let btns='';
+  if(!rolled(st.id))btns=`<button class="btn accent small ${hl('roll')}" data-rollhere>${esc(G.btn.roll)}</button>`;
+  else if(S.pendingCase&&isCur)btns=`<button class="btn small danger ${hl('case')}" data-case>${esc(G.btn.openCase)}</button>`;
   else{
-    const miss=missingRequired(st.id);
-    if(q.length<n)hint=H.addMore(n-q.length);
-    else if(isChain(st)&&q.some(it=>!it.probes.length))hint=H.probe;
-    else if(miss.length)hint=H.card(cardName(miss[0].card));
-    else if(isCur&&!last)hint=H.minDone;
-    else if(isCur)hint=H.finDone;
-    if(canAddTo(st))btns+=`<button class="btn ghost small" data-add="${st.id}">${esc(G.btn.add)}</button>`;
-    if(isCur&&!last)btns+=`<button class="btn small" data-next ${met?'':'disabled'}>${esc(G.btn.nextStage)}</button>`;
-    if(isCur&&last&&met)btns+=`<button class="btn accent small" data-tobuild>${esc(G.btn.toCheck)}</button>`;
+    if(canAddTo(st))btns+=`<button class="btn ghost small ${hl('add')}" data-add="${st.id}">${esc(G.btn.add)}</button>`;
+    if(isCur&&!last)btns+=`<button class="btn small ${hl('next')}" data-next ${met?'':'disabled'}>${esc(G.btn.nextStage)}</button>`;
+    if(isCur&&last&&met)btns+=`<button class="btn accent small ${hl('build')}" data-tobuild ${readyToBuild()?'':'disabled'}>${esc(G.btn.build)}</button>`;
   }
-  if(!isCur&&met&&rolled(st.id))hint='';
-  return `${hint?`<div class="nexthint"><b>${esc(G.next)}</b> ${esc(hint)}</div>`:''}<div class="row-btns">${btns}</div>`;
+  const hint=step.hint;
+  return `${hint?`<div class="nexthint ${step.warn?'warn':''}"><b>${esc(G.next)}</b> ${esc(hint)}</div>`:''}<div class="row-btns">${btns}</div>`;
 }
 
-function qHTML(it,st){
-  const G=TEXTS.game,isKey=isChain(st)&&!it.off;
-  return `<div class="q ${it.case?'case':''} ${it.off?'off':''}">
-    <span class="id">${esc(itemLabel(it))}</span><span class="txt">${esc(it.text)}${it.off?`<br><small class="off-note">${esc(G.offTarget)}</small>`:''}</span><span class="min">${esc(G.min(itemMins(it)))}</span>
-    ${it.probes&&it.probes.length?`<div class="probes">${it.probes.map(p=>`<div class="probe"><b>${esc(probe(p.card).n)}</b> ${esc(p.text)}</div>`).join('')}</div>`:''}
-    <div class="acts">${isKey&&it.probes.length<CONFIG.maxProbes?`<button class="linkbtn" data-probe="${it.uid}">${esc(G.addProbe(CONFIG.probeMinutes))}</button>`:''}<button class="linkbtn muted" data-del="${it.uid}">${esc(G.remove)}</button></div>
+function qHTML(it,st,step){
+  const G=TEXTS.game,isKey=isChain(st)&&!it.off,over=overBudget();
+  const extra=over&&isExtraItem(it),hlProbe=step.focus==='probe'&&step.uid===it.uid?'next-action':'';
+  return `<div class="q ${it.case?'case':''} ${it.off?'off':''} ${extra?'extra':''}">
+    <span class="id">${esc(itemLabel(it))}</span><span class="txt">${esc(it.text)}${it.off?`<br><small class="off-note">${esc(G.offTarget)}</small>`:''}${extra?`<br><small class="extra-note">${esc(G.extra)}</small>`:''}</span><span class="min">${esc(G.min(itemMins(it)))}</span>
+    ${it.probes&&it.probes.length?`<div class="probes">${it.probes.map((p,k)=>`<div class="probe ${over&&k>0?'extra':''}"><span><b>${esc(probe(p.card).n)}</b> ${esc(p.text)}${over&&k>0?` <small class="extra-note">${esc(G.extra)}</small>`:''}</span><button class="linkbtn muted" data-delprobe="${it.uid}:${k}">${esc(G.removeProbe)}</button></div>`).join('')}</div>`:''}
+    <div class="acts">${isKey&&it.probes.length<CONFIG.maxProbes?`<button class="linkbtn ${hlProbe}" data-probe="${it.uid}">${esc(G.addProbe(CONFIG.probeMinutes))}</button>`:''}<button class="linkbtn muted" data-del="${it.uid}">${esc(G.remove)}</button></div>
   </div>`;
 }
 
@@ -266,15 +289,18 @@ function bindGame(){
   on('[data-flip]',b=>{S.flipped[b.dataset.flip]=!S.flipped[b.dataset.flip];render()});
   on('[data-probe]',b=>openProbe(b.dataset.probe));
   on('[data-del]',b=>{S.items=S.items.filter(it=>it.uid!==b.dataset.del);render()});
+  on('[data-delprobe]',b=>{const[u,k]=b.dataset.delprobe.split(':');const it=S.items.find(x=>x.uid===u);it.probes.splice(+k,1);render()});
   on('[data-next]',()=>{S.opened++;const st=STAGES[S.opened-1];S.active=st.id;if(st.hyp)S.flipped[st.hyp]=false;render()});
   on('#roll',roll);
   on('[data-rollhere]',b=>{b.disabled=true;roll()});
   on('[data-case],#opencase',()=>openSituation(S.pendingCase));
   on('[data-add]',b=>{S.active=b.dataset.add;openPicker(b.dataset.add)});
-  on('[data-tobuild]',()=>{const bd=document.getElementById('build');if(bd){bd.scrollIntoView({behavior:'smooth',block:'center'});bd.focus()}});
+  on('[data-tobuild]',buildGuide);
   on('#restart',confirmRestart);
-  on('#build',()=>{track('guide_built',S.limit+' мин');S.screen='guide';render();window.scrollTo(0,0)});
+  on('#build',buildGuide);
 }
+
+function buildGuide(){if(!readyToBuild())return;track('guide_built',S.limit+' мин');S.screen='guide';render();window.scrollTo(0,0)}
 
 /* ===================== МОДАЛЬНЫЕ ОКНА ===================== */
 const mroot=document.getElementById('modalRoot');let lastFocus=null;
@@ -310,7 +336,7 @@ function openCompose(id){
   const checks=(c.checks||STD_CHECKS).concat(isChain(st)?[T.checksHyp(st.hyp)]:[]);
   openModal(`<div class="eyebrow">${esc(c.name)} · ${esc(st.name)} · ${esc(TEXTS.game.min(c.min))}</div>
   <div class="formula">${esc(c.f)}</div>
-  ${c.min>left?`<div class="etalon redbg">${esc(T.noFit(left,S.limit))}</div>`:''}
+  ${c.min>left?`<div class="etalon redbg">${esc(T.noFit(left,c.min,CONFIG.reserveMinutes))}</div>`:''}
   <label for="qt" class="eyebrow">${esc(T.label)}</label>
   <textarea id="qt" placeholder="${esc(T.placeholder)}"></textarea>
   ${selfChecks(checks)}
@@ -341,7 +367,7 @@ function openProbe(itemUid){
   <div class="etalon sunk"><div class="eyebrow">${esc(T.question)}</div>${esc(it.text)}</div>
   <div class="chips" role="group" aria-label="${esc(T.aria)}">${PROBES.map(p=>`<button class="chip" data-p="${p.id}" aria-pressed="false" ${used.has(p.id)?'disabled':''}>${esc(p.n)}</button>`).join('')}</div>
   <div id="pinfo" class="etalon yellowbg" hidden></div>
-  ${left<cost?`<div class="etalon redbg">${esc(T.noTime)}</div>`:''}
+  ${left<cost?`<div class="etalon redbg">${esc(T.noTime(CONFIG.reserveMinutes))}</div>`:''}
   <label for="pt" class="eyebrow">${esc(T.label)}</label><textarea id="pt" placeholder="${esc(T.placeholder)}"></textarea>
   <div class="mfoot"><button class="btn ghost" id="cx">${esc(TEXTS.compose.cancel)}</button><button class="btn accent" id="put" disabled>${esc(T.put)}</button></div>`,'yellow',ov=>{
     let sel=null;const ta=ov.querySelector('#pt'),put=ov.querySelector('#put');
